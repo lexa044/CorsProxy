@@ -12,6 +12,7 @@ namespace Demo.FrontEnd.App_Start
             routes.IgnoreRoute("{resource}.axd/{*pathInfo}");
 
             routes.EnableCorsProxy()
+                .SetTimeout(60*5)
                 .Allow(new Uri("http://localhost:54160/"));//optional, all hosts by default
 
             routes.MapRoute(

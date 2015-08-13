@@ -206,6 +206,7 @@
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
+    <Content Include="Content\todo.css" />
     <Content Include="Content\themes\base\accordion.css" />
     <Content Include="Content\themes\base\all.css" />
     <Content Include="Content\themes\base\autocomplete.css" />
@@ -258,6 +259,7 @@
     <Content Include="Scripts\knockout-3.3.0.debug.js" />
     <Content Include="Scripts\knockout-3.3.0.js" />
     <Content Include="Scripts\modernizr-2.8.3.js" />
+    <Content Include="Scripts\todo.js" />
     <Content Include="Web.config">
       <SubType>Designer</SubType>
     </Content>

@@ -12,6 +12,7 @@ namespace CorsProxy.AspNet
     public class CorsProxyRoute : Route
     {
         private readonly List<Uri> _allowedUserHostAddresses = new List<Uri>();
+        private int _connectionTimeout = 0;
 
         /// <summary>
         ///     Initializes a new instance of the <see cref="T:System.Web.Routing.Route" /> class, by using the specified URL
@@ -43,11 +44,38 @@ namespace CorsProxy.AspNet
             _allowedUserHostAddresses.Add(targetUri);
         }
 
+        /// <summary>
+        /// Set connection timeout
+        /// </summary>
+        /// <param name="timeout">Timeout in seconds to set to WebRequest. </param>
+        /// <remarks>
+        ///     This is helpful in cases where you make calls to slow servers or 
+        /// requests taking a long to process.
+        ///     If you do not set a timeout WebRequest will use the default value, if you make a request that takes long to process
+        ///     the browser will get an error.
+        /// </remarks>
+        /// <example>
+        ///     <para>In your <c>RouteConfig.cs</c>:</para>
+        ///     <code>
+        /// routes.EnableCorsProxy().SetTimeout(5);
+        /// </code>
+        /// </example>
+        public CorsProxyRoute SetTimeout(int timeout)
+        {
+            _connectionTimeout = (timeout * 1000);// Convert to miliseconds
+            return this;
+        }
+
         public override RouteData GetRouteData(HttpContextBase httpContext)
         {
             var routeData = base.GetRouteData(httpContext);
             if (routeData == null)
                 return null;
+
+            if (_connectionTimeout > 0)
+            {
+                httpContext.Items.Add("CorsProxy-Timeout", _connectionTimeout);
+            }
 
             if (_allowedUserHostAddresses.Any())
             {

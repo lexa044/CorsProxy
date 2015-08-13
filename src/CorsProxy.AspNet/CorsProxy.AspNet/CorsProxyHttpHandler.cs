@@ -61,6 +61,12 @@ namespace CorsProxy.AspNet
                 request.ContentType = context.Request.ContentType;
                 request.UserAgent = context.Request.UserAgent;
 
+                var connectionTimeout = context.Items["CorsProxy-Timeout"] as int?;
+                if (connectionTimeout.HasValue && connectionTimeout > 0)
+                {
+                    request.Timeout = connectionTimeout.Value;
+                }
+
                 if (context.Request.AcceptTypes != null)
                     request.Accept = string.Join(";", context.Request.AcceptTypes);
 
