@@ -28,6 +28,22 @@ namespace CorsProxy.AspNet
             return sb.ToString();
         }
 
+        public static void CopyCookies(HttpRequest from, CookieContainer to, string host)
+        {
+            // Send Cookie extracted from the incoming request
+            for (int i = 0; i < from.Cookies.Count; i++)
+            {
+                HttpCookie navigatorCookie = from.Cookies[i];
+                Cookie c = new Cookie(navigatorCookie.Name, navigatorCookie.Value);
+                c.Domain = new Uri(host).Host;
+                c.Expires = navigatorCookie.Expires;
+                c.HttpOnly = navigatorCookie.HttpOnly;
+                c.Path = navigatorCookie.Path;
+                c.Secure = navigatorCookie.Secure;
+                to.Add(c);
+            }
+        }
+
         public static void CopyCookies(HttpWebResponse from, HttpResponse to, string host)
         {
             to.Cookies.Clear();

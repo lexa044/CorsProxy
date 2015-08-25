@@ -25,7 +25,7 @@ namespace CorsProxy.AspNet
     public class CorsProxyHttpHandler : IHttpHandler
     {
         private const string NO_PROXY_URL = "X-CorsProxy-Url was not specified. The CorsProxy should only be invoked from the proxy JavaScript.";
-        private const string FORBIDDDEN_URL = "X-CorsProxy is not allowed to route to '{0}'";
+        private const string FORBIDDEN_URL = "X-CorsProxy is not allowed to route to '{0}'";
 
         /// <summary>
         /// Checks Request to ensure we have a TargetUrl and TargetUrl is not forbidden
@@ -48,7 +48,7 @@ namespace CorsProxy.AspNet
             if (isForbidden == true)
             {
                 context.Response.StatusCode = 403;
-                context.Response.StatusDescription = string.Format(FORBIDDDEN_URL, url);
+                context.Response.StatusDescription = string.Format(FORBIDDEN_URL, url);
                 context.Response.End();
                 requestIsValid = false;
             }
@@ -78,8 +78,11 @@ namespace CorsProxy.AspNet
                 outgoing.Timeout = connectionTimeout.Value;
             }
             Utility.CopyHeaders(context.Request, outgoing);
+            CookieContainer cookieJar = new CookieContainer();
+            Utility.CopyCookies(context.Request, cookieJar, url);//Remote
+            outgoing.CookieContainer = cookieJar;
 
-            // Copy POST Data
+            // Copy Data
             if (!context.Request.HttpMethod.Equals("GET", StringComparison.OrdinalIgnoreCase))
             {
                 outgoing.ContentLength = context.Request.ContentLength;
@@ -97,7 +100,7 @@ namespace CorsProxy.AspNet
             }
 
             Stream receiveStream = response.GetResponseStream();
-            Utility.CopyCookies(response, context.Response, context.Request.Url.Host);
+            Utility.CopyCookies(response, context.Response, context.Request.Url.Host);//Local Proxy
             context.Response.ContentType = response.ContentType;
             Utility.CopyStream(receiveStream, context.Response.OutputStream);
             response.Close();
