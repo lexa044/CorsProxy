@@ -58,14 +58,7 @@ angular.module('todoApp', [])
             }
 
             if (attachReverseProxy) {
-                var url = config.url;
-                var questionPos = url.indexOf('?');
-                if (questionPos == -1) {
-                    url += '?' + config.data;
-                } else {
-                    url += '&' + config.data;
-                }
-                config.headers['X-CorsProxy-Url'] = url;
+                config.headers['X-CorsProxy-Url'] = config.url;
                 config.url = appConfig.ReverseProxyUri;
             }
 

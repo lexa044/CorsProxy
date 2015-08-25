@@ -1,4 +1,5 @@
 ﻿using System;
+using System.IO;
 using System.Net;
 using System.Text;
 using System.Web;
@@ -23,6 +24,38 @@ namespace CorsProxy.AspNet
     /// </remarks>
     public class CorsProxyHttpHandler : IHttpHandler
     {
+        private const string NO_PROXY_URL = "X-CorsProxy-Url was not specified. The CorsProxy should only be invoked from the proxy JavaScript.";
+        private const string FORBIDDDEN_URL = "X-CorsProxy is not allowed to route to '{0}'";
+
+        /// <summary>
+        /// Checks Request to ensure we have a TargetUrl and TargetUrl is not forbidden
+        /// </summary>
+        /// <param name="context">Request Context</param>
+        /// <param name="url">Requested Url</param>
+        /// <returns>Whether we have a valid request or not</returns>
+        bool EnsureRequestIsValid(HttpContext context, string url)
+        {
+            bool requestIsValid = true;
+            if (string.IsNullOrEmpty(url))
+            {
+                context.Response.StatusCode = 501;
+                context.Response.StatusDescription = NO_PROXY_URL;
+                context.Response.End();
+                requestIsValid = false;
+            }
+
+            var isForbidden = context.Items["CorsProxy-Forbidden"] as bool?;
+            if (isForbidden == true)
+            {
+                context.Response.StatusCode = 403;
+                context.Response.StatusDescription = string.Format(FORBIDDDEN_URL, url);
+                context.Response.End();
+                requestIsValid = false;
+            }
+
+            return requestIsValid;
+        }
+
         /// <summary>
         ///     Enables processing of HTTP Web requests by a custom HttpHandler that implements the
         ///     <see cref="T:System.Web.IHttpHandler" /> interface.
@@ -34,95 +67,41 @@ namespace CorsProxy.AspNet
         public void ProcessRequest(HttpContext context)
         {
             var url = context.Request.Headers["X-CorsProxy-Url"];
-            if (url == null)
-            {
-                context.Response.StatusCode = 501;
-                context.Response.StatusDescription =
-                    "X-CorsProxy-Url was not specified. The CorsProxy should only be invoked from the proxy JavaScript.";
-                context.Response.End();
+            if (!EnsureRequestIsValid(context, url))
                 return;
-            }
 
-            var isForbidden = context.Items["CorsProxy-Forbidden"] as bool?;
-            if (isForbidden == true)
+            HttpWebResponse response;
+            HttpWebRequest outgoing = (HttpWebRequest)WebRequest.Create(url);
+            var connectionTimeout = context.Items["CorsProxy-Timeout"] as int?;
+            if (connectionTimeout.HasValue && connectionTimeout > 0)
             {
-                context.Response.StatusCode = 403;
-                context.Response.StatusDescription =
-                    "X-CorsProxy is not allowed to route to '" + url + "'";
-                context.Response.End();
-                return;
+                outgoing.Timeout = connectionTimeout.Value;
+            }
+            Utility.CopyHeaders(context.Request, outgoing);
+
+            // Copy POST Data
+            if (!context.Request.HttpMethod.Equals("GET", StringComparison.OrdinalIgnoreCase))
+            {
+                outgoing.ContentLength = context.Request.ContentLength;
+                Utility.CopyStream(context.Request.InputStream, outgoing.GetRequestStream());
             }
 
             try
             {
-                var request = WebRequest.CreateHttp(url);
-                context.Request.CopyHeadersTo(request);
-                request.Method = context.Request.HttpMethod;
-                request.ContentType = context.Request.ContentType;
-                request.UserAgent = context.Request.UserAgent;
-
-                var connectionTimeout = context.Items["CorsProxy-Timeout"] as int?;
-                if (connectionTimeout.HasValue && connectionTimeout > 0)
-                {
-                    request.Timeout = connectionTimeout.Value;
-                }
-
-                if (context.Request.AcceptTypes != null)
-                    request.Accept = string.Join(";", context.Request.AcceptTypes);
-
-                if (context.Request.UrlReferrer != null)
-                    request.Referer = context.Request.UrlReferrer.ToString();
-
-                if (!context.Request.HttpMethod.Equals("GET", StringComparison.OrdinalIgnoreCase))
-                    context.Request.InputStream.CopyTo(request.GetRequestStream());
-
-                //context.Request.UrlReferrer = request.Referer;
-                var response = (HttpWebResponse) request.GetResponse();
-                response.CopyHeadersTo(context.Response);
-                context.Response.ContentType = response.ContentType;
-                context.Response.StatusCode = (int) response.StatusCode;
-                context.Response.StatusDescription = response.StatusDescription;
-
-                var stream = response.GetResponseStream();
-                if (stream != null && response.ContentLength > 0)
-                {
-                    stream.CopyTo(context.Response.OutputStream);
-                    stream.Flush();
-                }
-                //context.Response.Close();
+                response = (HttpWebResponse)outgoing.GetResponse();
             }
-            catch (WebException exception)
+            catch (WebException ex)
             {
-                context.Response.AddHeader("X-CorsProxy-Failure", "false");
-
-                var response = exception.Response as HttpWebResponse;
-                if (response != null)
-                {
-                    context.Response.StatusCode = (int) response.StatusCode;
-                    context.Response.StatusDescription = response.StatusDescription;
-                    response.CopyHeadersTo(context.Response);
-                    var stream = response.GetResponseStream();
-                    if (stream != null)
-                        stream.CopyTo(context.Response.OutputStream);
-
-                    return;
-                }
-
-                context.Response.StatusCode = 501;
-                context.Response.StatusDescription = exception.Status.ToString();
-                var msg = Encoding.ASCII.GetBytes(exception.Message);
-                context.Response.OutputStream.Write(msg, 0, msg.Length);
-                context.Response.Close();
+                Utility.Return500(context, ex);
+                return;
             }
-            catch (Exception exception)
-            {
-                context.Response.StatusCode = 501;
-                context.Response.StatusDescription = "Failed to call proxied URL.";
-                context.Response.AddHeader("X-CorsProxy-Failure", "true");
-                var msg = Encoding.ASCII.GetBytes(exception.Message);
-                context.Response.OutputStream.Write(msg, 0, msg.Length);
-                context.Response.Close();
-            }
+
+            Stream receiveStream = response.GetResponseStream();
+            Utility.CopyCookies(response, context.Response, context.Request.Url.Host);
+            context.Response.ContentType = response.ContentType;
+            Utility.CopyStream(receiveStream, context.Response.OutputStream);
+            response.Close();
+            context.Response.End();
         }
 
         /// <summary>
